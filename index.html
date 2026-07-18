@@ -148,6 +148,20 @@ body{background:var(--paper);font-family:var(--sans);color:var(--ink);max-width:
 .formrow .lb{font-size:11px;color:var(--ink3);letter-spacing:.08em;margin-bottom:6px}
 textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
 .empty{border:1.5px dashed var(--line);border-radius:14px;padding:22px 16px;text-align:center;color:var(--ink3);font-size:12.5px;line-height:1.8;background:rgba(255,255,255,.5);margin-bottom:12px}
+
+/* ---- v3.0 拍照与成像室 ---- */
+.thumb{width:42px;height:42px;border-radius:9px;object-fit:cover;border:1px solid var(--line);flex:none}
+.thumbph{width:42px;height:42px;border-radius:9px;background:var(--indigo-tint);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.photorow{display:flex;gap:10px;align-items:center}
+#fPrev{width:56px;height:56px;border-radius:10px;object-fit:cover;display:none;border:1px solid var(--line)}
+.collage{display:grid;grid-template-columns:1fr 1.2fr 1fr;grid-template-areas:'outer top top' 'outer bottom acc' 'shoes bottom acc';gap:8px;margin-top:8px}
+.ccell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.c-outer{grid-area:outer}.c-top{grid-area:top}.c-bottom{grid-area:bottom}.c-shoes{grid-area:shoes}.c-acc{grid-area:acc}
+.cph{width:100%;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff}
+.c-bottom .cph{aspect-ratio:3/4}
+.cic{font-size:30px;opacity:.8}
+.cnm{font-size:10.5px;color:var(--ink2);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fittabs{display:flex;gap:8px;justify-content:center;margin:2px 0 10px}
 </style>
 </head>
 <body>
@@ -229,7 +243,7 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
       <div style="height:8px"></div>
       <button class="btn ghost blk" style="color:#A5453C" onclick="wipeAll()">清空全部数据</button>
     </div>
-    <div class="card"><div class="kv"><span>版本</span><b>集成版 v2.0 · 模块 1+2+3</b></div>
+    <div class="card"><div class="kv"><span>版本</span><b>集成版 v3.0 · 模块 1+2+3 · 成像室</b></div>
       <div class="kv"><span>数据源</span><b>Open-Meteo（免密钥）</b></div>
       <div class="kv"><span>个人冷热常数</span><b id="meOffset">0.00</b></div>
       <button class="btn ghost blk" style="margin-top:8px" onclick="resetOffset()">重置冷热常数</button>
@@ -285,6 +299,14 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
     <div class="grab"></div>
     <h3 id="itemSheetTitle">添加衣物</h3>
     <div class="sub">十几秒录一件；录得越全，搭配越准</div>
+    <div class="formrow"><div class="lb">照片（拍一张或从相册选，主色会自动识别）</div>
+      <input type="file" id="fPhoto" accept="image/*" style="display:none" onchange="photoPicked(this)">
+      <div class="photorow">
+        <button class="btn ghost" onclick="$('fPhoto').click()">📷 拍照 / 选图</button>
+        <img id="fPrev" alt="">
+        <button class="mini warn" id="fPhotoDel" style="display:none" onclick="clearPhoto()">移除</button>
+      </div>
+    </div>
     <div class="formrow"><div class="lb">名称</div><input class="inp" id="fName" placeholder="如：藏青西装外套 / 白色棉T恤"></div>
     <div class="formrow"><div class="lb">类别</div><div class="chips" id="fCat"></div></div>
     <div class="formrow"><div class="lb">保暖程度（1 最薄 – 5 最暖）</div><div class="chips" id="fWarm"></div></div>
@@ -302,6 +324,24 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
     </div>
     <div style="height:6px"></div>
     <button class="btn ghost blk" onclick="closeItemSheet()">关闭</button>
+  </div>
+</div>
+
+<!-- 成像室 -->
+<div class="dim" id="sh-fit">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h3 id="fitTitle">成像室</h3>
+    <div class="sub">模特看整体，拼搭看细节；两个视角随时切换</div>
+    <div class="fittabs" id="fitTabs"></div>
+    <div id="fitBody"></div>
+    <div style="height:14px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" style="flex:1" onclick="fitSwap()">换一套</button>
+      <button class="btn pri" style="flex:1" onclick="fitWear()">今天穿这套</button>
+    </div>
+    <div style="height:6px"></div>
+    <button class="btn ghost blk" onclick="closeFit()">关闭</button>
   </div>
 </div>
 
@@ -610,14 +650,25 @@ function renderWardrobe(){
     var c=catOf(it.cat);
     var cpw=(it.price&&it.wears)?('￥'+Math.round(it.price/it.wears)+'/次'):(it.price?'还没穿过':'未填价格');
     var dots='';for(var d=1;d<=5;d++)dots+='<span class="dot'+(d<=(it.warm||3)?' on':'')+'"></span>';
-    h+='<div class="itemcard"><div class="rowa"><span class="cattag">'+c.n+'</span><span class="nm">'+esc(it.name)+'</span><span class="cchip" style="background:'+colorHex(it.color)+'"></span></div>'
+    h+='<div class="itemcard"><div class="rowa"><span class="thumbph" id="th_'+it.id+'">'+c.ic+'</span><span class="cattag">'+c.n+'</span><span class="nm">'+esc(it.name)+'</span><span class="cchip" style="background:'+(it.hex||colorHex(it.color))+'"></span></div>'
       +'<div class="meta"><span>'+dots+'</span><span>'+esc((it.occ||[]).join(' · '))+'</span><span>穿过 '+(it.wears||0)+' 次</span><span>'+cpw+'</span>'+((it.attrs&&it.attrs.length)?'<span>'+esc(it.attrs.join('·'))+'</span>':'')+'</div>'
       +'<div class="ops"><button class="mini pri" onclick="wearOne(\''+it.id+'\')">今天穿了 +1</button><button class="mini" onclick="openItemSheet(\''+it.id+'\')">编辑</button><button class="mini warn" onclick="delItem(\''+it.id+'\')">删除</button></div></div>';
   });
   $('itemList').innerHTML=h;
+  loadThumbs(list);
+}
+function loadThumbs(list){
+  list.forEach(function(it){
+    if(!it.photo)return;
+    IDB.get(it.id,function(d){
+      if(!d)return;
+      var el=document.getElementById('th_'+it.id);
+      if(el)el.outerHTML='<img class="thumb" id="th_'+it.id+'" src="'+d+'">';
+    });
+  });
 }
 function wearOne(id){var a=WD.items();for(var i=0;i<a.length;i++)if(a[i].id===id)a[i].wears=(a[i].wears||0)+1;WD.save(a);renderWardrobe();toast('已记一次穿着，每次成本已更新')}
-function delItem(id){var it=WD.byId(id);if(!confirm('删除「'+(it?it.name:'')+'」？'))return;WD.save(WD.items().filter(function(i){return i.id!==id}));renderWardrobe();renderOutfits();toast('已删除')}
+function delItem(id){var it=WD.byId(id);if(!confirm('删除「'+(it?it.name:'')+'」？'))return;WD.save(WD.items().filter(function(i){return i.id!==id}));IDB.del(id);renderWardrobe();renderOutfits();toast('已删除')}
 
 /* ---- 录入弹层 ---- */
 var EDIT_ID=null;
@@ -638,6 +689,10 @@ function openItemSheet(id){
   $('itemSheetTitle').textContent=it?'编辑衣物':'添加衣物';
   $('fName').value=it?it.name:'';
   $('fPrice').value=(it&&it.price)?it.price:'';
+  PENDING_PHOTO=null;PENDING_HEX=null;PHOTO_CLEARED=false;
+  $('fPhoto').value='';
+  $('fPrev').style.display='none';$('fPhotoDel').style.display='none';
+  if(it&&it.photo){IDB.get(it.id,function(d){if(d&&EDIT_ID===it.id){$('fPrev').src=d;$('fPrev').style.display='block';$('fPhotoDel').style.display='inline-block'}})}
   chipRow('fCat',CATS.map(function(c){return c.n}),it?catOf(it.cat).n:'上装',false);
   chipRow('fWarm',WARMN,it?String(it.warm||3):'3',false);
   chipRow('fColor',COLORS.map(function(c){return c[0]}),it?it.color:'藏青',false);
@@ -655,9 +710,14 @@ function saveItem(){
   var catN=chipVals('fCat')[0]||'上装',warm=parseInt(chipVals('fWarm')[0]||'3',10);
   var color=chipVals('fColor')[0]||'藏青',occ=chipVals('fOcc'),attrs=chipVals('fAttr');
   var price=parseFloat($('fPrice').value);
-  var a=WD.items();
-  if(EDIT_ID){for(var i=0;i<a.length;i++)if(a[i].id===EDIT_ID){a[i].name=name;a[i].cat=catByName(catN)||'top';a[i].warm=warm;a[i].color=color;a[i].occ=occ;a[i].attrs=attrs;a[i].price=isNaN(price)?null:price}}
-  else a.push({id:'i'+Date.now()+Math.floor(Math.random()*1e4),name:name,cat:catByName(catN)||'top',warm:warm,color:color,occ:occ,attrs:attrs,price:isNaN(price)?null:price,wears:0});
+  var a=WD.items(),tid=null;
+  if(EDIT_ID){for(var i=0;i<a.length;i++)if(a[i].id===EDIT_ID){tid=EDIT_ID;a[i].name=name;a[i].cat=catByName(catN)||'top';a[i].warm=warm;a[i].color=color;a[i].occ=occ;a[i].attrs=attrs;a[i].price=isNaN(price)?null:price;
+    if(PENDING_PHOTO){a[i].photo=1;a[i].hex=PENDING_HEX||a[i].hex}
+    if(PHOTO_CLEARED){a[i].photo=0;a[i].hex=null}}}
+  else{tid='i'+Date.now()+Math.floor(Math.random()*1e4);
+    a.push({id:tid,name:name,cat:catByName(catN)||'top',warm:warm,color:color,occ:occ,attrs:attrs,price:isNaN(price)?null:price,wears:0,photo:PENDING_PHOTO?1:0,hex:PENDING_PHOTO?PENDING_HEX:null})}
+  if(PENDING_PHOTO&&tid)IDB.put(tid,PENDING_PHOTO);
+  if(PHOTO_CLEARED&&tid)IDB.del(tid);
   WD.save(a);closeItemSheet();renderWardrobe();renderOutfits();
   toast(EDIT_ID?'已保存修改':'已加入衣橱');EDIT_ID=null;
 }
@@ -754,7 +814,7 @@ function outfitCard(st,o,i){
   if(!o)return'<div class="outfit"><div class="oh"><span>'+st.ic+'</span><h3>'+st.key+'</h3><span class="fit off">还搭不出来</span></div><div class="muted">衣橱里缺上装或下装；适合「'+st.occ+'」的单品也可以再录几件。</div></div>';
   return'<div class="outfit"><div class="oh"><span>'+st.ic+'</span><h3>'+st.key+'</h3><span class="fit'+(o.fit?'':' off')+'">'+(o.fit?'合身':'尽力接近')+' '+o.clo.toFixed(2)+' clo</span></div>'
     +outfitLines(o)
-    +'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearOutfit('+i+')">今天穿这套</button><button class="mini" onclick="reOutfit('+i+')">换一套</button></div></div>';
+    +'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearOutfit('+i+')">今天穿这套</button><button class="mini" onclick="openFit('+i+')">上身看看</button><button class="mini" onclick="reOutfit('+i+')">换一套</button></div></div>';
 }
 function paintOutfits(){
   var h='';
@@ -796,7 +856,7 @@ function askOutfit(){
   var o=buildOutfit(occ,r,t.rain);
   if(!o){$('askResult').innerHTML='<div class="muted" style="margin-top:10px">衣橱里适合「'+occ+'」的还不够，先去多录几件。</div>';return}
   ASKFIT=o;
-  $('askResult').innerHTML='<div class="outfit" style="margin-top:12px"><div class="oh"><span>💬</span><h3>按您说的 · 偏「'+occ+'」</h3><span class="fit'+(o.fit?'':' off')+'">'+o.clo.toFixed(2)+' clo</span></div>'+outfitLines(o)+'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearAsk()">就穿这套</button><button class="mini" onclick="askOutfit()">再换一套</button></div></div>';
+  $('askResult').innerHTML='<div class="outfit" style="margin-top:12px"><div class="oh"><span>💬</span><h3>按您说的 · 偏「'+occ+'」</h3><span class="fit'+(o.fit?'':' off')+'">'+o.clo.toFixed(2)+' clo</span></div>'+outfitLines(o)+'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearAsk()">就穿这套</button><button class="mini" onclick="openFitAsk()">上身看看</button><button class="mini" onclick="askOutfit()">再换一套</button></div></div>';
 }
 function wearAsk(){
   if(!ASKFIT)return;var ids={};ASKFIT.set.forEach(function(it){ids[it.id]=1});
@@ -891,7 +951,7 @@ function confLabelOnly(v){$('confLabel').textContent=v<34?'个性优先':(v<67?'
 function confChange(){var v=parseInt($('confSlider').value,10);confLabelOnly(v);var p=PF.get();p.conform=v;PF.set(p)}
 function exportData(){
   var data={v:2,items:WD.items(),profile:PF.get(),offset:LS.offset()};
-  $('backupBox').innerHTML='<div class="sub" style="margin-top:10px">备份已生成：请<b>长按全选并复制</b>下面全部文字，粘到备忘录里保存</div><textarea class="inp" id="bkText" style="min-height:90px"></textarea>';
+  $('backupBox').innerHTML='<div class="sub" style="margin-top:10px">备份已生成：请<b>长按全选并复制</b>下面全部文字，粘到备忘录里保存。<br>注：照片体积大，暂不随文字备份，换手机后照片需补拍。</div><textarea class="inp" id="bkText" style="min-height:90px"></textarea>';
   $('bkText').value=JSON.stringify(data);
   $('bkText').focus();$('bkText').select();
 }
@@ -909,8 +969,143 @@ function doImport(){
 function wipeAll(){
   if(!confirm('确定清空衣橱、画像与校准数据？此操作不可恢复。建议先导出备份。'))return;
   ['sw_items','sw_profile','sw_offset','sw_manual','sw_calDate','sw_calShift','sw_lastwx'].forEach(function(k){localStorage.removeItem(k)});
-  toast('已清空全部本机数据');renderProfile();renderWardrobe();renderOutfits();load();
+  IDB.clear();
+  toast('已清空全部本机数据（含照片）');renderProfile();renderWardrobe();renderOutfits();load();
 }
+
+/* ==================== v3.0 · 拍照录入 + 成像室 ==================== */
+var IDB={db:null,
+  open:function(cb){if(IDB.db)return cb(IDB.db);
+    try{var r=indexedDB.open('sw_photos',1);
+      r.onupgradeneeded=function(){r.result.createObjectStore('p')};
+      r.onsuccess=function(){IDB.db=r.result;cb(IDB.db)};
+      r.onerror=function(){cb(null)};
+    }catch(e){cb(null)}},
+  put:function(k,v){IDB.open(function(db){if(!db)return;try{db.transaction('p','readwrite').objectStore('p').put(v,k)}catch(e){}})},
+  get:function(k,cb){IDB.open(function(db){if(!db)return cb(null);try{var q=db.transaction('p').objectStore('p').get(k);q.onsuccess=function(){cb(q.result||null)};q.onerror=function(){cb(null)}}catch(e){cb(null)}})},
+  del:function(k){IDB.open(function(db){if(!db)return;try{db.transaction('p','readwrite').objectStore('p').delete(k)}catch(e){}})},
+  clear:function(){IDB.open(function(db){if(!db)return;try{db.transaction('p','readwrite').objectStore('p').clear()}catch(e){}})}};
+var PENDING_PHOTO=null,PENDING_HEX=null,PHOTO_CLEARED=false;
+function photoPicked(inp){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  var img=new Image(),url=URL.createObjectURL(f);
+  img.onload=function(){
+    var s=Math.min(1,420/Math.max(img.width,img.height));
+    var c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*s));c.height=Math.max(1,Math.round(img.height*s));
+    var g=c.getContext('2d');g.drawImage(img,0,0,c.width,c.height);
+    PENDING_PHOTO=c.toDataURL('image/jpeg',0.72);PHOTO_CLEARED=false;
+    $('fPrev').src=PENDING_PHOTO;$('fPrev').style.display='block';$('fPhotoDel').style.display='inline-block';
+    try{
+      var w=c.width,h=c.height;
+      var d=g.getImageData(Math.round(w*0.22),Math.round(h*0.22),Math.max(1,Math.round(w*0.56)),Math.max(1,Math.round(h*0.56))).data;
+      var r=0,gg=0,b=0,n=0;
+      for(var i=0;i<d.length;i+=16){r+=d[i];gg+=d[i+1];b+=d[i+2];n++}
+      r=Math.round(r/n);gg=Math.round(gg/n);b=Math.round(b/n);
+      PENDING_HEX='#'+((1<<24)+(r<<16)+(gg<<8)+b).toString(16).slice(1).toUpperCase();
+      var name=nearestColorName(r,gg,b);
+      chipRow('fColor',COLORS.map(function(x){return x[0]}),name,false);
+      toast('已从照片识别主色：'+name+'（不准可手动改）');
+    }catch(e){}
+    URL.revokeObjectURL(url);
+  };
+  img.src=url;
+}
+function clearPhoto(){PENDING_PHOTO=null;PENDING_HEX=null;PHOTO_CLEARED=true;$('fPrev').style.display='none';$('fPhotoDel').style.display='none';$('fPhoto').value=''}
+function nearestColorName(r,g,b){
+  var best='灰',bd=1e9;
+  COLORS.forEach(function(cd){
+    if(cd[0]==='花纹')return;
+    var h=cd[1],rr=parseInt(h.slice(1,3),16),gg2=parseInt(h.slice(3,5),16),bb=parseInt(h.slice(5,7),16);
+    var d=(r-rr)*(r-rr)+(g-gg2)*(g-gg2)+(b-bb)*(b-bb);
+    if(d<bd){bd=d;best=cd[0]}
+  });
+  return best;
+}
+
+/* ---- 卡通模特 ---- */
+function dollSVG(set){
+  var by={},accs=[];
+  set.forEach(function(it){if(it.cat==='acc')accs.push(it);else if(!by[it.cat])by[it.cat]=it});
+  var top=by.top,bot=by.bottom,out=by.outer,sh=by.shoes;
+  function hx(it){return (it&&(it.hex||colorHex(it.color)))||'#CCC'}
+  var skin='#E5D3BF',hair='#3D3A35';
+  var longTop=top&&(top.warm||3)>=3;
+  var skirt=bot&&/裙/.test(bot.name);
+  var shorts=bot&&(bot.warm||3)<=1&&!skirt;
+  var s='<svg viewBox="0 0 220 345" style="width:100%;max-width:240px;display:block;margin:0 auto">';
+  s+='<rect x="92" y="150" width="16" height="162" rx="8" fill="'+skin+'"/><rect x="112" y="150" width="16" height="162" rx="8" fill="'+skin+'"/>';
+  s+='<ellipse cx="100" cy="318" rx="13" ry="7" fill="'+skin+'"/><ellipse cx="120" cy="318" rx="13" ry="7" fill="'+skin+'"/>';
+  s+='<rect x="63" y="70" width="14" height="86" rx="7" fill="'+skin+'"/><rect x="143" y="70" width="14" height="86" rx="7" fill="'+skin+'"/>';
+  s+='<path d="M78 66 h64 l5 88 h-74 z" fill="'+skin+'"/>';
+  s+='<rect x="103" y="46" width="14" height="15" fill="'+skin+'"/><circle cx="110" cy="32" r="19" fill="'+skin+'"/>';
+  s+='<path d="M91 30 a19 19 0 0 1 38 0 l0 -6 a19 19 0 0 0 -38 0 z" fill="'+hair+'" opacity=".9"/>';
+  if(bot){var bc=hx(bot);
+    if(skirt)s+='<path d="M84 146 h52 l15 74 h-82 z" fill="'+bc+'"/>';
+    else{var lh=shorts?58:160;
+      s+='<rect x="85" y="138" width="50" height="18" rx="5" fill="'+bc+'"/><rect x="87" y="150" width="21" height="'+lh+'" rx="7" fill="'+bc+'"/><rect x="112" y="150" width="21" height="'+lh+'" rx="7" fill="'+bc+'"/>';}}
+  if(sh){var sc=hx(sh);s+='<rect x="85" y="307" width="29" height="17" rx="8" fill="'+sc+'"/><rect x="106" y="307" width="29" height="17" rx="8" fill="'+sc+'"/>';}
+  if(top){var tc=hx(top),slY=longTop?152:104;
+    s+='<path d="M76 64 h68 l5 82 h-78 z" fill="'+tc+'"/><rect x="61" y="67" width="17" height="'+(slY-67)+'" rx="8" fill="'+tc+'"/><rect x="142" y="67" width="17" height="'+(slY-67)+'" rx="8" fill="'+tc+'"/>';}
+  if(out){var oc=hx(out);
+    s+='<path d="M69 62 h33 v98 h-37 z" fill="'+oc+'"/><path d="M118 62 h33 l4 98 h-37 z" fill="'+oc+'"/><rect x="57" y="65" width="18" height="90" rx="9" fill="'+oc+'"/><rect x="145" y="65" width="18" height="90" rx="9" fill="'+oc+'"/>';}
+  accs.forEach(function(ac){var c=hx(ac);
+    if(/围巾/.test(ac.name))s+='<rect x="88" y="55" width="44" height="13" rx="6" fill="'+c+'"/><rect x="101" y="60" width="13" height="44" rx="6" fill="'+c+'"/>';
+    else if(/帽/.test(ac.name))s+='<rect x="88" y="5" width="44" height="13" rx="6" fill="'+c+'"/><rect x="81" y="15" width="58" height="6" rx="3" fill="'+c+'"/>';
+    else s+='<rect x="165" y="150" width="26" height="32" rx="6" fill="'+c+'"/><path d="M168 150 q10 -16 20 0" stroke="'+c+'" stroke-width="4" fill="none"/>';
+  });
+  s+='</svg>';
+  return s;
+}
+
+/* ---- 照片拼搭 ---- */
+function collageHTML(set){
+  var by={},accs=[];
+  set.forEach(function(it){if(it.cat==='acc')accs.push(it);else if(!by[it.cat])by[it.cat]=it});
+  function cell(it,cls){
+    if(!it)return'';
+    return'<div class="ccell '+cls+'"><div class="cph" id="cph_'+it.id+'" style="background:'+(it.hex||colorHex(it.color))+'26"><span class="cic">'+catOf(it.cat).ic+'</span></div><div class="cnm">'+esc(it.name)+'</div></div>';
+  }
+  return'<div class="collage">'+cell(by.outer,'c-outer')+cell(by.top,'c-top')+cell(by.bottom,'c-bottom')+cell(by.shoes,'c-shoes')+(accs[0]?cell(accs[0],'c-acc'):'')+'</div><div class="muted" style="margin-top:8px;text-align:center">没照片的单品显示颜色底＋图标；去衣橱补拍即可</div>';
+}
+function fillCollagePhotos(set){
+  set.forEach(function(it){
+    if(!it.photo)return;
+    IDB.get(it.id,function(d){
+      if(!d)return;
+      var el=document.getElementById('cph_'+it.id);
+      if(el)el.innerHTML='<img src="'+d+'" style="width:100%;height:100%;object-fit:cover">';
+    });
+  });
+}
+
+/* ---- 成像室 ---- */
+var FITCTX=null,FITMODE='doll';
+function openFit(i){var o=OUTFITS[i];if(!o){toast('这套还没搭出来');return}FITCTX={kind:'set',i:i};FITMODE='doll';paintFit()}
+function openFitAsk(){if(!ASKFIT){toast('先点「帮我搭」');return}FITCTX={kind:'ask'};FITMODE='doll';paintFit()}
+function fitOutfit(){if(!FITCTX)return null;return FITCTX.kind==='ask'?ASKFIT:OUTFITS[FITCTX.i]}
+function paintFit(){
+  var o=fitOutfit();if(!o){closeFit();return}
+  var name=FITCTX.kind==='ask'?'按您说的':SETCFG[FITCTX.i].key;
+  $('fitTitle').textContent='成像室 · '+name+'（'+o.clo.toFixed(2)+' clo）';
+  $('fitTabs').innerHTML='<span class="chip'+(FITMODE==='doll'?' on':'')+'" onclick="FITMODE=\'doll\';paintFit()">模特上身</span><span class="chip'+(FITMODE==='lay'?' on':'')+'" onclick="FITMODE=\'lay\';paintFit()">照片拼搭</span>';
+  if(FITMODE==='doll'){
+    var chips='';
+    o.set.forEach(function(it){chips+='<span class="chip" style="pointer-events:none"><span class="cchip" style="background:'+(it.hex||colorHex(it.color))+'"></span> '+esc(it.name)+'</span>'});
+    $('fitBody').innerHTML=dollSVG(o.set)+'<div class="chips" style="margin-top:10px;justify-content:center">'+chips+'</div>';
+  }else{
+    $('fitBody').innerHTML=collageHTML(o.set);
+    fillCollagePhotos(o.set);
+  }
+  $('sh-fit').classList.add('on');
+}
+function fitSwap(){
+  if(!FITCTX)return;
+  if(FITCTX.kind==='ask')askOutfit();else reOutfit(FITCTX.i);
+  paintFit();
+}
+function fitWear(){if(!FITCTX)return;if(FITCTX.kind==='ask')wearAsk();else wearOutfit(FITCTX.i)}
+function closeFit(){$('sh-fit').classList.remove('on')}
+$('sh-fit').addEventListener('click',function(e){if(e.target===this)closeFit()});
 
 renderOutfits();
 load();

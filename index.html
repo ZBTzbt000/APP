@@ -162,6 +162,15 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
 .cic{font-size:30px;opacity:.8}
 .cnm{font-size:10.5px;color:var(--ink2);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fittabs{display:flex;gap:8px;justify-content:center;margin:2px 0 10px}
+/* ---- v4.0 配色与流行色 ---- */
+.palnote{font-size:11px;color:var(--ink2);margin-top:8px;line-height:1.7;background:var(--indigo-tint);border-radius:9px;padding:8px 10px}
+.trrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+.trrow:last-child{border-bottom:none}
+.trsw{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.12);flex:none}
+.trnm{flex:1;min-width:0}
+.trnm b{display:block;font-size:12.5px}
+.trnm span{font-size:10px;color:var(--ink3)}
+.trown{font-size:10.5px;flex:none}
 </style>
 </head>
 <body>
@@ -211,6 +220,12 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
       <div class="muted" style="font-size:11px">越往左越个性出挑，越往右越经典百搭；影响下方流行排序与推荐配色的大胆程度</div>
       <div id="areaNote"></div>
     </div>
+    <div class="card">
+      <h3>权威流行色 · 2025–27</h3>
+      <div class="muted" style="margin-bottom:4px">来源：Pantone 年度色 / WGSN×Coloro 秋冬关键色 / 中国服装协会（数据内置，随版本更新）</div>
+      <div id="trendColors"></div>
+      <div class="palnote">衣橱对照：<span id="trendOwnSum">—</span>。从众度 ≥50 时，含流行色的单品在搭配打分中获得加分。※ 部分色值为按官方描述近似标定。</div>
+    </div>
     <div class="eyebrow">本季流行 · <span id="seasonLabel"></span> · 对照您的衣橱</div>
     <div id="trendList"></div>
   </div>
@@ -243,8 +258,8 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.6}
       <div style="height:8px"></div>
       <button class="btn ghost blk" style="color:#A5453C" onclick="wipeAll()">清空全部数据</button>
     </div>
-    <div class="card"><div class="kv"><span>版本</span><b>集成版 v3.0 · 模块 1+2+3 · 成像室</b></div>
-      <div class="kv"><span>数据源</span><b>Open-Meteo（免密钥）</b></div>
+    <div class="card"><div class="kv"><span>版本</span><b>集成版 v4.0 · 模块 1+2+3 · 成像室 · 权威配色</b></div>
+      <div class="kv"><span>数据源</span><b>Open-Meteo（免密钥）· 流行色内置</b></div>
       <div class="kv"><span>个人冷热常数</span><b id="meOffset">0.00</b></div>
       <button class="btn ghost blk" style="margin-top:8px" onclick="resetOffset()">重置冷热常数</button>
     </div>
@@ -621,7 +636,9 @@ var NEUTRAL=['黑','白','灰','藏青','米杏','卡其','棕'];
 var OCCS=['商务','休闲','运动','宴会'];
 var ATTRS=['防水','麂皮','易皱','需干洗'];
 var WARMN=['1·很薄','2·薄','3·适中','4·厚','5·很厚'];
-var CLOV={top:[0.08,0.16,0.26,0.36,0.48],bottom:[0.06,0.15,0.24,0.32,0.42],outer:[0.10,0.22,0.36,0.55,0.80],shoes:[0.02,0.03,0.05,0.08,0.12],acc:[0.01,0.02,0.03,0.05,0.08]};
+/* v4.0：单品保暖档位按 ISO 9920/ASHRAE 单品 clo 表校准 */
+var CLOV={top:[0.08,0.20,0.30,0.36,0.48],bottom:[0.08,0.15,0.24,0.28,0.35],outer:[0.12,0.25,0.36,0.48,0.70],shoes:[0.02,0.03,0.05,0.08,0.12],acc:[0.01,0.02,0.03,0.05,0.08]};
+function ensembleClo(sum){return Math.round((0.835*sum+0.161)*100)/100} /* ISO 9920 组合公式 */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function catOf(k){for(var i=0;i<CATS.length;i++)if(CATS[i].k===k)return CATS[i];return CATS[0]}
 function catByName(n){for(var i=0;i<CATS.length;i++)if(CATS[i].n===n||CATS[i].n.indexOf(n)===0)return CATS[i].k;if(n==='鞋')return'shoes';return null}
@@ -739,12 +756,71 @@ function bulkImport(){
   toast('导入 '+ok+' 件'+(bad?('，'+bad+' 行没读懂（检查类别写法）'):''));
 }
 
-/* ==================== 模块 3 · 推荐引擎 ==================== */
+/* ==================== 模块 3 · 推荐引擎（v4.0 权威配色版） ==================== */
 var ROLE='商务',OUTFITS=[],ASKFIT=null;
-function colorScore(cols){
-  var nn=cols.filter(function(c){return c&&NEUTRAL.indexOf(c)<0&&c!=='花纹'});
-  var uniq={};nn.forEach(function(c){uniq[c]=1});var n=Object.keys(uniq).length;
-  return n<=1?8:(n===2?1:-7);
+function hexToHsl(hex){
+  var r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  var mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2,d=mx-mn,h=0,s=0;
+  if(d>0){s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    if(mx===r)h=((g-b)/d+(g<b?6:0));else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;}
+  return{h:h,s:s,l:l};
+}
+function itemHexOf(it){return (it&&(it.hex||colorHex(it.color)))||'#CCCCCC'}
+function isNeutralIt(it){
+  if(NEUTRAL.indexOf(it.color)>=0)return true;
+  if(it.color==='花纹')return false;
+  var c=hexToHsl(itemHexOf(it));return c.s<0.16||c.l>0.92||c.l<0.10;
+}
+function hueDiff(a,b){var d=Math.abs(a-b)%360;return d>180?360-d:d}
+/* 配色打分器：色轮方案 + ≤3色 + 上浅下深（依据：色轮理论/60-30-10/本土口诀） */
+function colorReport(set){
+  var colored=set.filter(function(it){return !isNeutralIt(it)});
+  var notes=[],score=0;
+  var groups=[];
+  colored.forEach(function(it){
+    var h=hexToHsl(itemHexOf(it)).h,hit=false;
+    groups.forEach(function(g){if(!hit&&hueDiff(g,h)<15)hit=true});
+    if(!hit)groups.push(h);
+  });
+  var nColors=groups.length+(colored.length<set.length?1:0);
+  var scheme='',pts=0;
+  if(groups.length===0){scheme='中性极简';pts=9}
+  else if(groups.length===1){scheme=colored.length>1?'同色系':'中性底+单点缀';pts=9}
+  else if(groups.length===2){
+    var d=hueDiff(groups[0],groups[1]);
+    if(d<45){scheme='邻近色';pts=7}
+    else if(d>=150&&d<=210){scheme='互补撞色';pts=4;notes.push('撞色宜一深一浅、面积一大一小')}
+    else{scheme='对比色';pts=2}
+  }else{scheme='多彩';pts=-4}
+  score+=pts;
+  if(nColors<=3)score+=5;else{score-=4*(nColors-3);notes.push('全身约'+nColors+'组色，建议收到3组内')}
+  var top=null,bot=null;
+  set.forEach(function(it){if(it.cat==='top'&&!top)top=it;if(it.cat==='bottom'&&!bot)bot=it});
+  var ud='';
+  if(top&&bot&&hexToHsl(itemHexOf(top)).l>hexToHsl(itemHexOf(bot)).l+0.06){score+=3;ud='上浅下深 ✓'}
+  var note='🎨 '+scheme+' · '+nColors+'组色'+(ud?' · '+ud:'');
+  if(notes.length)note+='｜'+notes[0];
+  return{score:score,note:note,boldCount:groups.length};
+}
+/* 权威流行色库（内置数据，随版本更新；部分色值按官方描述近似标定） */
+var TRENDCOLORS=[
+  {n:'云舞白 Cloud Dancer',org:'Pantone 2026 年度色',hex:'#F0EEE9',seasons:['春','夏','秋','冬']},
+  {n:'摩卡慕斯 Mocha Mousse',org:'Pantone 2025 年度色',hex:'#A47864',seasons:['春','夏','秋','冬']},
+  {n:'变革青 Transformative Teal',org:'WGSN×Coloro 2026 年度色',hex:'#1F5F63',seasons:['秋','冬']},
+  {n:'蜡纸米白 Wax Paper',org:'WGSN 26/27 秋冬关键色',hex:'#EDE6D4',seasons:['秋','冬']},
+  {n:'鲜紫 Fresh Purple',org:'WGSN 26/27 秋冬关键色',hex:'#8A63B0',seasons:['秋','冬']},
+  {n:'可可红棕 Cocoa Powder',org:'WGSN 26/27 秋冬关键色',hex:'#7E5344',seasons:['秋','冬']},
+  {n:'荧光黄绿 Green Glow',org:'WGSN 26/27 秋冬（夜间可视性佳）',hex:'#BFD94A',seasons:['秋','冬']},
+  {n:'铁锈色',org:'中国服装协会 2026/27 秋冬',hex:'#A65E44',seasons:['秋','冬']}
+];
+function trendMatchItem(it){
+  var c=hexToHsl(itemHexOf(it));
+  for(var i=0;i<TRENDCOLORS.length;i++){
+    var t=hexToHsl(TRENDCOLORS[i].hex);
+    var okH=(c.s<0.12&&t.s<0.12)?true:hueDiff(c.h,t.h)<22;
+    if(okH&&Math.abs(c.l-t.l)<0.14&&Math.abs(c.s-t.s)<0.22)return TRENDCOLORS[i];
+  }
+  return null;
 }
 function targetRange(){
   if(CUR.fc){var v=computeView();return{r:v.range,rain:isRainNow(v),live:true}}
@@ -771,19 +847,22 @@ function buildOutfit(occWant,range,rain){
     var combos=[base.slice()];
     outs.forEach(function(o){combos.push(base.concat([o]))});
     combos.forEach(function(set){
-      var clo=0,occ=0,cols=[],wearSum=0,wp=false,sd=false,hasOuter=false;
-      set.forEach(function(it){clo+=itemClo(it);occ+=occScoreOf(it,occWant);cols.push(it.color);wearSum+=(it.wears||0);
+      var sum=0,occ=0,wearSum=0,wp=false,sd=false,hasOuter=false;
+      set.forEach(function(it){sum+=itemClo(it);occ+=occScoreOf(it,occWant);wearSum+=(it.wears||0);
         if(it.cat==='outer'){hasOuter=true;if(it.attrs&&it.attrs.indexOf('防水')>=0)wp=true}
         if(it.cat==='shoes'&&it.attrs&&it.attrs.indexOf('麂皮')>=0)sd=true});
-      var accPick=null;
-      if(clo<lo-0.03&&accs.length){accPick=accs.slice().sort(function(a,b){return itemClo(b)-itemClo(a)})[0];clo+=itemClo(accPick)}
-      var fit=clo>=lo-0.08&&clo<=hi+0.08;
-      var s=-Math.abs(clo-mid)*140+occ+colorScore(cols)-wearSum*1.5;
-      var boldCols=cols.filter(function(c){return NEUTRAL.indexOf(c)<0}).length;
-      s+=(conform>=60?(boldCols===0?6:-3*boldCols):(boldCols>0?4:0));
+      var fullSet=set,accPick=null;
+      var ens=ensembleClo(sum);
+      if(ens<lo-0.03&&accs.length){accPick=accs.slice().sort(function(a,b){return itemClo(b)-itemClo(a)})[0];sum+=itemClo(accPick);ens=ensembleClo(sum);fullSet=set.concat([accPick])}
+      var fit=ens>=lo-0.08&&ens<=hi+0.08;
+      var rep=colorReport(fullSet);
+      var s=-Math.abs(ens-mid)*140+occ+rep.score-wearSum*1.5;
+      s+=(conform>=60?(rep.boldCount===0?6:-3*rep.boldCount):(rep.boldCount>0?4:0));
+      var trendN=0;
+      if(conform>=50){fullSet.forEach(function(it){if(trendMatchItem(it))trendN++});s+=Math.min(8,trendN*4)}
       if(fit)s+=30;
       if(rain){if(wp)s+=22;if(!hasOuter)s-=8;if(sd)s-=40}
-      cands.push({set:accPick?set.concat([accPick]):set,clo:clo,s:s,fit:fit});
+      cands.push({set:fullSet,clo:ens,s:s,fit:fit,note:rep.note,trend:trendN>0});
     });
   })})});
   if(!cands.length)return null;
@@ -805,7 +884,7 @@ function outfitLines(o){
   var h='';
   set.forEach(function(it){
     var dots='';for(var d=1;d<=5;d++)dots+='<span class="dot'+(d<=(it.warm||3)?' on':'')+'"></span>';
-    h+='<div class="oline"><span class="ci">'+catOf(it.cat).ic+'</span><span class="onm">'+esc(it.name)+'</span><span class="cchip" style="background:'+colorHex(it.color)+'"></span><span class="osub">'+dots+'</span></div>';
+    h+='<div class="oline"><span class="ci">'+catOf(it.cat).ic+'</span><span class="onm">'+esc(it.name)+'</span><span class="cchip" style="background:'+itemHexOf(it)+'"></span><span class="osub">'+dots+'</span></div>';
   });
   return h;
 }
@@ -814,6 +893,7 @@ function outfitCard(st,o,i){
   if(!o)return'<div class="outfit"><div class="oh"><span>'+st.ic+'</span><h3>'+st.key+'</h3><span class="fit off">还搭不出来</span></div><div class="muted">衣橱里缺上装或下装；适合「'+st.occ+'」的单品也可以再录几件。</div></div>';
   return'<div class="outfit"><div class="oh"><span>'+st.ic+'</span><h3>'+st.key+'</h3><span class="fit'+(o.fit?'':' off')+'">'+(o.fit?'合身':'尽力接近')+' '+o.clo.toFixed(2)+' clo</span></div>'
     +outfitLines(o)
+    +'<div class="muted" style="margin-top:6px;font-size:11px">'+(o.note||'')+(o.trend?' · ✨含权威流行色':'')+'</div>'
     +'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearOutfit('+i+')">今天穿这套</button><button class="mini" onclick="openFit('+i+')">上身看看</button><button class="mini" onclick="reOutfit('+i+')">换一套</button></div></div>';
 }
 function paintOutfits(){
@@ -856,7 +936,7 @@ function askOutfit(){
   var o=buildOutfit(occ,r,t.rain);
   if(!o){$('askResult').innerHTML='<div class="muted" style="margin-top:10px">衣橱里适合「'+occ+'」的还不够，先去多录几件。</div>';return}
   ASKFIT=o;
-  $('askResult').innerHTML='<div class="outfit" style="margin-top:12px"><div class="oh"><span>💬</span><h3>按您说的 · 偏「'+occ+'」</h3><span class="fit'+(o.fit?'':' off')+'">'+o.clo.toFixed(2)+' clo</span></div>'+outfitLines(o)+'<div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearAsk()">就穿这套</button><button class="mini" onclick="openFitAsk()">上身看看</button><button class="mini" onclick="askOutfit()">再换一套</button></div></div>';
+  $('askResult').innerHTML='<div class="outfit" style="margin-top:12px"><div class="oh"><span>💬</span><h3>按您说的 · 偏「'+occ+'」</h3><span class="fit'+(o.fit?'':' off')+'">'+o.clo.toFixed(2)+' clo</span></div>'+outfitLines(o)+'<div class="muted" style="margin-top:6px;font-size:11px">'+(o.note||'')+'</div><div class="ops" style="margin-top:10px"><button class="mini pri" onclick="wearAsk()">就穿这套</button><button class="mini" onclick="openFitAsk()">上身看看</button><button class="mini" onclick="askOutfit()">再换一套</button></div></div>';
 }
 function wearAsk(){
   if(!ASKFIT)return;var ids={};ASKFIT.set.forEach(function(it){ids[it.id]=1});
@@ -930,6 +1010,7 @@ function renderTrend(){
   var se=seasonOf();$('seasonLabel').textContent=se+'季';
   var north=['华北','东北','西北'].indexOf(p.area)>=0;
   $('areaNote').innerHTML=north?'<div class="banner warn" style="margin-top:12px;margin-bottom:0">'+p.prov+'属北方：换季比南方早约 2–4 周，'+(se==='夏'?'立秋后早晚就该备薄外套':se==='秋'?'厚外套要比流行日历提前上身':se==='冬'?'重点看防风与鞋底防滑':'倒春寒多，外套别收太早')+'</div>':'';
+  renderTrendColors();
   var items=WD.items(),list=(TRENDS[se]||[]).slice();
   list.sort(function(a,b){return Math.abs(a.conf-p.conform)-Math.abs(b.conf-p.conform)});
   var h='';
@@ -941,6 +1022,18 @@ function renderTrend(){
   });
   $('trendList').innerHTML=h;
 }
+function renderTrendColors(){
+  var items=WD.items(),se=seasonOf(),ownTotal=0,h='';
+  TRENDCOLORS.forEach(function(t){
+    var inSeason=t.seasons.indexOf(se)>=0;
+    var own=null;
+    items.forEach(function(it){if(!own&&trendMatchItem(it)===t)own=it});
+    if(own)ownTotal++;
+    h+='<div class="trrow"'+(inSeason?'':' style="opacity:.55"')+'><span class="trsw" style="background:'+t.hex+'"></span><span class="trnm"><b>'+t.n+(inSeason?'':'（非当季）')+'</b><span>'+t.org+'</span></span><span class="trown '+(own?'own-yes':'own-no')+'">'+(own?'✓ '+esc(own.name):'暂无')+'</span></div>';
+  });
+  $('trendColors').innerHTML=h;
+  $('trendOwnSum').textContent='您的衣橱覆盖 '+ownTotal+'/'+TRENDCOLORS.length+' 个权威流行色';
+}
 function fillProv(area,sel){
   var ph='';(AREAS[area]||[]).forEach(function(pv){ph+='<option'+(pv===sel?' selected':'')+'>'+pv+'</option>'});
   $('selProv').innerHTML=ph;
@@ -950,7 +1043,7 @@ function trendSave(){var p=PF.get();p.area=$('selArea').value;p.prov=$('selProv'
 function confLabelOnly(v){$('confLabel').textContent=v<34?'个性优先':(v<67?'平衡':'经典从众')}
 function confChange(){var v=parseInt($('confSlider').value,10);confLabelOnly(v);var p=PF.get();p.conform=v;PF.set(p)}
 function exportData(){
-  var data={v:2,items:WD.items(),profile:PF.get(),offset:LS.offset()};
+  var data={v:4,items:WD.items(),profile:PF.get(),offset:LS.offset()};
   $('backupBox').innerHTML='<div class="sub" style="margin-top:10px">备份已生成：请<b>长按全选并复制</b>下面全部文字，粘到备忘录里保存。<br>注：照片体积大，暂不随文字备份，换手机后照片需补拍。</div><textarea class="inp" id="bkText" style="min-height:90px"></textarea>';
   $('bkText').value=JSON.stringify(data);
   $('bkText').focus();$('bkText').select();
@@ -1021,13 +1114,11 @@ function nearestColorName(r,g,b){
   });
   return best;
 }
-
-/* ---- 卡通模特 ---- */
 function dollSVG(set){
   var by={},accs=[];
   set.forEach(function(it){if(it.cat==='acc')accs.push(it);else if(!by[it.cat])by[it.cat]=it});
   var top=by.top,bot=by.bottom,out=by.outer,sh=by.shoes;
-  function hx(it){return (it&&(it.hex||colorHex(it.color)))||'#CCC'}
+  function hx(it){return itemHexOf(it)}
   var skin='#E5D3BF',hair='#3D3A35';
   var longTop=top&&(top.warm||3)>=3;
   var skirt=bot&&/裙/.test(bot.name);
@@ -1056,14 +1147,12 @@ function dollSVG(set){
   s+='</svg>';
   return s;
 }
-
-/* ---- 照片拼搭 ---- */
 function collageHTML(set){
   var by={},accs=[];
   set.forEach(function(it){if(it.cat==='acc')accs.push(it);else if(!by[it.cat])by[it.cat]=it});
   function cell(it,cls){
     if(!it)return'';
-    return'<div class="ccell '+cls+'"><div class="cph" id="cph_'+it.id+'" style="background:'+(it.hex||colorHex(it.color))+'26"><span class="cic">'+catOf(it.cat).ic+'</span></div><div class="cnm">'+esc(it.name)+'</div></div>';
+    return'<div class="ccell '+cls+'"><div class="cph" id="cph_'+it.id+'" style="background:'+itemHexOf(it)+'26"><span class="cic">'+catOf(it.cat).ic+'</span></div><div class="cnm">'+esc(it.name)+'</div></div>';
   }
   return'<div class="collage">'+cell(by.outer,'c-outer')+cell(by.top,'c-top')+cell(by.bottom,'c-bottom')+cell(by.shoes,'c-shoes')+(accs[0]?cell(accs[0],'c-acc'):'')+'</div><div class="muted" style="margin-top:8px;text-align:center">没照片的单品显示颜色底＋图标；去衣橱补拍即可</div>';
 }
@@ -1077,8 +1166,6 @@ function fillCollagePhotos(set){
     });
   });
 }
-
-/* ---- 成像室 ---- */
 var FITCTX=null,FITMODE='doll';
 function openFit(i){var o=OUTFITS[i];if(!o){toast('这套还没搭出来');return}FITCTX={kind:'set',i:i};FITMODE='doll';paintFit()}
 function openFitAsk(){if(!ASKFIT){toast('先点「帮我搭」');return}FITCTX={kind:'ask'};FITMODE='doll';paintFit()}
@@ -1090,7 +1177,7 @@ function paintFit(){
   $('fitTabs').innerHTML='<span class="chip'+(FITMODE==='doll'?' on':'')+'" onclick="FITMODE=\'doll\';paintFit()">模特上身</span><span class="chip'+(FITMODE==='lay'?' on':'')+'" onclick="FITMODE=\'lay\';paintFit()">照片拼搭</span>';
   if(FITMODE==='doll'){
     var chips='';
-    o.set.forEach(function(it){chips+='<span class="chip" style="pointer-events:none"><span class="cchip" style="background:'+(it.hex||colorHex(it.color))+'"></span> '+esc(it.name)+'</span>'});
+    o.set.forEach(function(it){chips+='<span class="chip" style="pointer-events:none"><span class="cchip" style="background:'+itemHexOf(it)+'"></span> '+esc(it.name)+'</span>'});
     $('fitBody').innerHTML=dollSVG(o.set)+'<div class="chips" style="margin-top:10px;justify-content:center">'+chips+'</div>';
   }else{
     $('fitBody').innerHTML=collageHTML(o.set);
